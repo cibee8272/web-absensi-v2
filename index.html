@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Absensi QR & Selfie</title>
+    <!-- Pustaka QR Code -->
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <!-- Pustaka untuk Mengubah HTML ke Gambar -->
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    
+    <style>
+        :root {
+            --primary: #4a90e2;
+            --success: #28a745;
+            --danger: #dc3545;
+            --warning: #ffc107;
+            --dark: #343a40;
+            --light: #f8f9fa;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f6f9;
+            color: #333;
+        }
+
+        /* Layout & Container */
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        h1, h2, h3 { margin-top: 0; color: var(--dark); }
+
+        /* Login Page */
+        #login-page {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: linear-gradient(135deg, var(--primary), #0056b3);
+        }
+        .login-box {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            width: 100%;
+            max-width: 350px;
+            text-align: center;
+        }
+        .form-group { margin-bottom: 15px; text-align: left; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: bold; }
+        .form-control {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: 0.3s;
+        }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-success { background: var(--success); color: white; }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-secondary { background: #6c757d; color: white; }
+        .btn:hover { opacity: 0.9; }
+
+        /* Dashboard Navigation */
+        #attendance-page { display: none; }
+        .nav-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #ddd;
+            padding-bottom: 10px;
+            overflow-x: auto;
+        }
+        .nav-item {
+            padding: 10px 20px;
+            cursor: pointer;
+            background: #e9ecef;
+            border-radius: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        .nav-item.active {
+            background: var(--primary);
+            color: white;
+        }
+
+        /* Sections */
+        .section { display: none; }
+        .section.active { display: block; animation: fadeIn 0.5s; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        /* Camera & QR */
+        .camera-container {
+            position: relative;
+            background: #000;
+            width: 100%;
+            height: 300px;
+            border-radius: 8px;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-top: 10px;
+        }
+        video { width: 100%; height: 100%; object-fit: cover; }
+        .overlay-btn {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+        }
+        #qr-reader { width: 100%; border-radius: 8px; overflow: hidden; }
+        
+        /* Tables */
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: var(--light); }
+        .status-hadir { color: var(--success); font-weight: bold; }
+        .status-izin { color: var(--warning); font-weight: bold; }
+        .status-sakit { color: var(--primary); font-weight: bold; }
+        .status-absen { color: var(--danger); font-weight: bold; }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 400px;
+        }
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        /* Utilities */
+        .hidden { display: none !important; }
+        .action-bar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        .alert {
+            padding: 10px;
+            background: #f8d7da;
+            color: #721c24;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            display: none;
+        }
+        .selfie-preview { max-width: 150px; border-radius: 5px; border: 3px solid var(--success); margin-top: 10px; }
+        
+        /* Tombol Unduh Gambar */
+        .btn-download-img {
+            background: #17a2b8; /* Biru muda */
+            color: white;
+        }
+        
+        /* Area yang akan di screenshot (supaya rapi) */
+        .capture-area {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        .capture-header {
+            text-align: center;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #333;
+            padding-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Halaman Login -->
+    <div id="login-page">
+        <div class="login-box">
+            <h2>Absensi Sekolah</h2>
+            <p class="alert" id="login-error"></p>
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" id="username" class="form-control" placeholder="Masukkan Username">
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" id="password" class="form-control" placeholder="Masukkan Password (12345)">
+            </div>
+            <button class="btn btn-primary" id="login-btn">Masuk</button>
+            <p style="margin-top:10px; font-size:12px; color:#666;">Demo: User: dion, Pass: 12345</p>
+        </div>
+    </div>
+
+    <!-- Halaman Utama Absensi -->
+    <div id="attendance-page">
+        <div class="container">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h2>Sistem Absensi Digital</h2>
+                <div>
+                    <span id="user-name" style="font-weight:bold; margin-right:10px;"></span>
+                    <button class="btn btn-danger" id="logout-btn" style="width:auto; padding: 5px 15px;">Logout</button>
+                </div>
+            </div>
+
+            <!-- Navigasi Tab -->
+            <div class="nav-tabs">
+                <div class="nav-item active" data-target="daily-section">Absensi Harian</div>
+                <div class="nav-item" data-target="students-section">Manajemen Siswa</div>
+                <div class="nav-item" data-target="full-list-section">Daftar Hadir</div>
+                <div class="nav-item" data-target="report-section">Laporan</div>
+            </div>
+
+            <!-- Tab 1: Absensi Harian -->
+            <div id="daily-section" class="section card active">
+                <h3>Form Absensi Hari Ini</h3>
+                <div class="form-group">
+                    <label>Jenis Kehadiran:</label>
+                    <select id="attendance-type" class="form-control">
+                        <option value="hadir">Hadir (Wajib Foto/Scan QR)</option>
+                        <option value="izin">Izin</option>
+                        <option value="sakit">Sakit</option>
+                    </select>
+                </div>
+
+                <!-- Input Alasan (Untuk Izin/Sakit) -->
+                <div class="form-group hidden" id="reason-group">
+                    <label>Keterangan:</label>
+                    <input type="text" id="reason-input" class="form-control" placeholder="Alasan izin/sakit...">
+                </div>
+
+                <!-- Bagian Kamera Manual (Selfie) -->
+                <div id="camera-manual-section">
+                    <div class="action-bar">
+                        <button class="btn btn-secondary" id="open-camera-btn">Buka Kamera (Selfie)</button>
+                    </div>
+                    <div class="camera-container hidden" id="camera-section">
+                        <video id="video" autoplay playsinline></video>
+                        <button class="btn btn-success overlay-btn hidden" id="capture-btn">Ambil Foto</button>
+                        <button class="btn btn-warning overlay-btn hidden" id="retake-btn">Ulangi</button>
+                        <canvas id="canvas" style="display:none;"></canvas>
+                        <p id="camera-error" style="color:red; position:absolute;"></p>
+                    </div>
+                </div>
+
+                <!-- Bagian QR Code Scanner -->
+                <div id="qr-scanner-section" class="hidden">
+                    <div class="action-bar">
+                        <p style="background:#eef; padding:10px; border-radius:5px; width:100%;">Arahkan kamera ke Kode QR siswa untuk melakukan absensi otomatis.</p>
+                    </div>
+                    <div id="qr-reader"></div>
+                    <p id="qr-result" style="text-align:center; font-weight:bold; margin-top:10px;"></p>
+                </div>
+
+                <button class="btn btn-success" id="submit-attendance-btn" style="margin-top:20px; font-size:18px;">Kirim Absensi</button>
+            </div>
+
+            <!-- Tab 2: Manajemen Siswa -->
+            <div id="students-section" class="section card">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h3>Daftar Siswa</h3>
+                    <button class="btn btn-primary" id="add-student-btn" style="width:auto;">+ Tambah Siswa</button>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Nama</th>
+                            <th>Username</th>
+                            <th>Kelas</th>
+                            <th>Kode QR</th>
+                            <th>Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="students-body"></tbody>
+                </table>
+            </div>
+
+            <!-- Tab 3: Daftar Hadir Lengkap -->
+            <div id="full-list-section" class="section card">
+                <h3>Riwayat Kehadiran</h3>
+                <div class="action-bar">
+                    <input type="date" id="date-filter" class="form-control" style="width:auto;">
+                    <select id="type-filter" class="form-control" style="width:auto;">
+                        <option value="">Semua Jenis</option>
+                        <option value="Check-In">Hadir (Masuk)</option>
+                        <option value="Check-Out">Hadir (Pulang)</option>
+                        <option value="Izin">Izin</option>
+                        <option value="Sakit">Sakit</option>
+                    </select>
+                    <button class="btn btn-secondary" id="clear-filter-btn">Reset</button>
+                    <!-- Tombol Unduh Gambar -->
+                    <button class="btn btn-download-img" id="export-img-btn">Unduh Gambar</button>
+                </div>
+                
+                <!-- Area yang akan di-capture -->
+                <div id="capture-target-list" class="capture-area">
+                    <div class="capture-header">
+                        <h2>Riwayat Kehadiran Lengkap</h2>
+                        <p id="list-date-label">Tanggal: Semua</p>
+                    </div>
+                    <table id="table-list-img">
+                        <thead>
+                            <tr>
+                                <th>Nama</th>
+                                <th>Tipe</th>
+                                <th>Waktu</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="full-attendance-list"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Tab 4: Laporan -->
+            <div id="report-section" class="section card">
+                <h3>Laporan Bulanan</h3>
+                <div class="action-bar">
+                    <input type="month" id="month-filter" class="form-control" style="width:auto;">
+                    <button class="btn btn-primary" id="generate-report-btn">Buat Laporan</button>
+                    <!-- Tombol Unduh Gambar Laporan -->
+                    <button class="btn btn-download-img hidden" id="export-report-img-btn">Unduh Laporan (Gambar)</button>
+                </div>
+                
+                <!-- Area yang akan di-capture untuk laporan -->
+                <div id="capture-target-report" class="capture-area hidden">
+                    <div class="capture-header">
+                        <h2>Laporan Kehadiran Bulanan</h2>
+                        <p id="report-month-label">Bulan: -</p>
+                    </div>
+                    <table id="table-report-img">
+                        <thead>
+                            <tr>
+                                <th>Nama</th>
+                                <th>Kelas</th>
+                                <th>Hadir</th>
+                                <th>Izin</th>
+                                <th>Sakit</th>
+                                <th>Total</th>
+                                <th>Persentase</th>
+                            </tr>
+                        </thead>
+                        <tbody id="report-body"></tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Modal Tambah/Edit Siswa -->
+    <div id="student-modal" class="modal">
+        <div class="modal-content">
+            <h3 id="modal-title">Tambah Siswa</h3>
+            <div class="form-group">
+                <label>Nama Lengkap</label>
+                <input type="text" id="student-name" class="form-control">
+            </div>
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" id="student-username" class="form-control">
+            </div>
+            <div class="form-group">
+                <label>Kelas</label>
+                <input type="text" id="student-class" class="form-control" value="12 TPTU 1" readonly>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" id="close-modal">Batal</button>
+                <button class="btn btn-primary" id="save-student-btn">Simpan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal QR Code Display -->
+    <div id="qr-show-modal" class="modal">
+        <div class="modal-content" style="text-align:center;">
+            <h3>Kode QR Saya</h3>
+            <p>Perunjukkan kode ini kepada petugas atau pindai dengan perangkat lain.</p>
+            <img id="qr-display-img" src="" alt="QR Code">
+            <div class="modal-actions" style="justify-content:center;">
+                <button class="btn btn-secondary" onclick="document.getElementById('qr-show-modal').style.display='none'">Tutup</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- KONFIGURASI & STATE ---
+        const KELAS = '12 TPTU 1';
+        let currentUser = null;
+        let stream = null;
+        let selfieData = null;
+        let editingStudentIndex = null;
+        let html5QrcodeScanner = null;
+        let currentReportData = [];
+        
+        // Data Default
+        let students = JSON.parse(localStorage.getItem('students')) || [
+            { name: 'Dion', username: 'dion', class: KELAS },
+            { name: 'Mulki', username: 'mulki', class: KELAS },
+            { name: 'Haikal', username: 'haikal', class: KELAS },
+            { name: 'Farok', username: 'farok', class: KELAS },
+            { name: 'Ilham', username: 'ilham', class: KELAS },
+            { name: 'Dimas', username: 'dimas', class: KELAS },
+            { name: 'Yogi', username: 'yogi', class: KELAS },
+            { name: 'Albar', username: 'albar', class: KELAS }
+        ];
+
+        let attendanceRecords = JSON.parse(localStorage.getItem('attendance')) || [];
+
+        // --- ELEMEN DOM ---
+        const loginPage = document.getElementById('login-page');
+        const attendancePage = document.getElementById('attendance-page');
+        const usernameInput = document.getElementById('username');
+        const passwordInput = document.getElementById('password');
+        const loginBtn = document.getElementById('login-btn');
+        const loginError = document.getElementById('login-error');
+        const userNameSpan = document.getElementById('user-name');
+        const logoutBtn = document.getElementById('logout-btn');
+
+        // Tab & Section
+        const navItems = document.querySelectorAll('.nav-item');
+        const sections = document.querySelectorAll('.section');
+
+        // Attendance Elements
+        const attendanceType = document.getElementById('attendance-type');
+        const reasonGroup = document.getElementById('reason-group');
+        const reasonInput = document.getElementById('reason-input');
+        const submitAttendanceBtn = document.getElementById('submit-attendance-btn');
+        
+        // Camera Elements
+        const openCameraBtn = document.getElementById('open-camera-btn');
+        const cameraSection = document.getElementById('camera-section');
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const captureBtn = document.getElementById('capture-btn');
+        const retakeBtn = document.getElementById('retake-btn');
+        const cameraError = document.getElementById('camera-error');
+
+        // QR Elements
+        const qrScannerSection = document.getElementById('qr-scanner-section');
+        const cameraManualSection = document.getElementById('camera-manual-section');
+        const qrResult = document.getElementById('qr-result');
+
+        // Lists & Tables
+        const fullAttendanceList = document.getElementById('full-attendance-list');
+        const studentsBody = document.getElementById('students-body');
+
+        // Filters & Reports
+        const dateFilter = document.getElementById('date-filter');
+        const typeFilter = document.getElementById('type-filter');
+        const clearFilterBtn = document.getElementById('clear-filter-btn');
+        const monthFilter = document.getElementById('month-filter');
+        const generateReportBtn = document.getElementById('generate-report-btn');
+        const reportBody = document.getElementById('report-body');
+        const exportReportImgBtn = document.getElementById('export-report-img-btn');
+
+        // Capture Targets
+        const captureTargetList = document.getElementById('capture-target-list');
+        const captureTargetReport = document.getElementById('capture-target-report');
+        const listDateLabel = document.getElementById('list-date-label');
+        const reportMonthLabel = document.getElementById('report-month-label');
+
+        // Modal
+        const studentModal = document.getElementById('student-modal');
+        const closeModal = document.getElementById('close-modal');
+        const addStudentBtn = document.getElementById('add-student-btn');
+        const modalTitle = document.getElementById('modal-title');
+        const studentName = document.getElementById('student-name');
+        const studentUsername = document.getElementById('student-username');
+        const saveStudentBtn = document.getElementById('save-student-btn');
+
+        // --- FUNGSI UTAMA ---
+
+        // 1. Login
+        loginBtn.addEventListener('click', () => {
+            const username = usernameInput.value.trim();
+            const user = students.find(stu => stu.username === username);
+            
+            if (user && passwordInput.value === '12345') {
+                currentUser = username;
+                userNameSpan.textContent = user.name;
+                loginPage.style.display = 'none';
+                attendancePage.style.display = 'block';
+                loadStudents();
+                loadFullList();
+                requestNotificationPermission();
+            } else {
+                loginError.style.display = 'block';
+                loginError.textContent = 'Username atau password salah! (Pass: 12345)';
+            }
+        });
+
+        logoutBtn.addEventListener('click', () => {
+            location.reload();
+        });
+
+        // 2. Tab Switching
+        navItems.forEach(item => {
+            item.addEventListener('click', () => {
+                navItems.forEach(n => n.classList.remove('active'));
+                sections.forEach(s => s.classList.remove('active'));
+                item.classList.add('active');
+                document.getElementById(item.dataset.target).classList.add('active');
+                
+                if(item.dataset.target === 'full-list-section') {
+                    loadFullList();
+                    exportReportImgBtn.classList.add('hidden');
+                }
+            });
+        });
+
+        // 3. Logika Tipe Absensi
+        attendanceType.addEventListener('change', () => {
+            const type = attendanceType.value;
+            
+            if (type === 'hadir') {
+                reasonGroup.classList.add('hidden');
+                cameraManualSection.classList.remove('hidden');
+                qrScannerSection.classList.add('hidden');
+                stopQrScanner();
+            } else {
+                reasonGroup.classList.remove('hidden');
+                cameraManualSection.classList.add('hidden');
+                qrScannerSection.classList.add('hidden');
+                stopQrScanner();
+                stopCamera();
+            }
+        });
+
+        // --- FITUR QR CODE ---
+        function startQrScanner() {
+            if (html5QrcodeScanner) return;
+            qrResult.textContent = "Memuat Kamera QR...";
+            qrResult.style.color = "#333";
+
+            html5QrcodeScanner = new Html5QrcodeScanner(
+                "qr-reader", 
+                { fps: 10, qrbox: {width: 250, height: 250} },
+                false
+            );
+
+            html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+        }
+
+        function stopQrScanner() {
+            if (html5QrcodeScanner) {
+                html5QrcodeScanner.clear().catch(error => console.error("Gagal membersihkan QR", error));
+                html5QrcodeScanner = null;
+            }
+            qrResult.textContent = "";
+        }
+
+        function onScanSuccess(decodedText, decodedResult) {
+            let scannedUser = decodedText;
+            try {
+                const obj = JSON.parse(decodedText);
+                scannedUser = obj.user;
+            } catch(e) {}
+
+            if (scannedUser === currentUser) {
+                qrResult.textContent = `Absensi Berhasil untuk: ${currentUser}`;
+                qrResult.style.color = "green";
+                submitAttendanceLogic('Check-In', null, 'Via QR Code');
+                setTimeout(() => {
+                    stopQrScanner();
+                    alert(`Absensi QR Berhasil!`);
+                }, 1000);
+            } else {
+                qrResult.textContent = `Kode QR tidak valid.`;
+                qrResult.style.color = "red";
+            }
+        }
+
+        function onScanFailure(error) {}
+
+        // Toggle QR
+        const qrToggleBtn = document.createElement('button');
+        qrToggleBtn.textContent = "atau Absen dengan QR Code";
+        qrToggleBtn.className = "btn btn-secondary";
+        qrToggleBtn.style.marginTop = "10px";
+        qrToggleBtn.style.fontSize = "14px";
+        qrToggleBtn.onclick = () => {
+            if(confirm("Aktifkan Pemindai QR?")) {
+                cameraManualSection.classList.add('hidden');
+                qrScannerSection.classList.remove('hidden');
+                startQrScanner();
+            }
+        };
+        document.getElementById('camera-manual-section').appendChild(qrToggleBtn);
+
+        // --- FITUR KAMERA ---
+        openCameraBtn.addEventListener('click', async () => {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+                video.srcObject = stream;
+                cameraSection.classList.remove('hidden');
+                openCameraBtn.classList.add('hidden');
+                captureBtn.classList.remove('hidden');
+            } catch (err) {
+                cameraError.textContent = 'Kamera error: ' + err.message;
+            }
+        });
+
+        captureBtn.addEventListener('click', () => {
+            const context = canvas.getContext('2d');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            selfieData = canvas.toDataURL('image/jpeg', 0.6);
+            stopCamera();
+            captureBtn.classList.add('hidden');
+            retakeBtn.classList.remove('hidden');
+            
+            const preview = document.createElement('img');
+            preview.src = selfieData;
+            preview.className = 'selfie-preview';
+            cameraSection.appendChild(preview);
+        });
+
+        retakeBtn.addEventListener('click', () => {
+            selfieData = null;
+            retakeBtn.classList.add('hidden');
+            const preview = cameraSection.querySelector('.selfie-preview');
+            if(preview) preview.remove();
+            openCameraBtn.classList.remove('hidden');
+        });
+
+        function stopCamera() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+            video.srcObject = null;
+            cameraSection.classList.add('hidden');
+            openCameraBtn.classList.remove('hidden');
+        }
+
+        // --- SUBMIT ATTENDANCE ---
+        submitAttendanceBtn.addEventListener('click', () => {
+            const type = attendanceType.value;
+            submitAttendanceLogic(type === 'hadir' ? 'Check-In' : (type === 'izin' ? 'Izin' : 'Sakit'));
+        });
+
+        function submitAttendanceLogic(typeStr, manualReason = null, manualNote = '') {
+            const type = attendanceType.value;
+            const reason = manualReason || reasonInput.value.trim();
+            const now = new Date();
+            const today = now.toISOString().split('T')[0];
+
+            if (typeStr === 'Check-In' && !manualNote) {
+                const existing = attendanceRecords.find(r => r.user === currentUser && r.date === today && (r.type === 'Check-In' || r.type === 'Check-Out'));
+                if (existing) {
+                    if(!confirm("Anda sudah absen hari ini. Apakah ingin Check-Out?")) return;
+                    existing.type = 'Check-Out';
+                    existing.checkOutTime = now.toLocaleString();
+                    saveData();
+                    alert("Check-Out berhasil!");
+                    return;
+                }
+                
+                if (!selfieData && !manualNote) {
+                    alert("Ambil foto selfie terlebih dahulu!");
+                    return;
+                }
+            }
+
+            const record = {
+                user: currentUser,
+                type: typeStr,
+                time: now.toLocaleString(),
+                date: today,
+                reason: reason || '-',
+                note: manualNote || '-'
+            };
+
+            if (selfieData) record.selfie = selfieData;
+
+            attendanceRecords.push(record);
+            saveData();
+            
+            alert('Kehadiran berhasil disimpan!');
+            reasonInput.value = '';
+            selfieData = null;
+            retakeBtn.click();
+        }
+
+        function saveData() {
+            localStorage.setItem('attendance', JSON.stringify(attendanceRecords));
+        }
+
+        // --- MANAJEMEN SISWA ---
+        function loadStudents() {
+            studentsBody.innerHTML = '';
+            students.forEach((student, index) => {
+                const row = document.createElement('tr');
+                const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${student.username}`;
+                
+                row.innerHTML = `
+                    <td>${student.name}</td>
+                    <td>${student.username}</td>
+                    <td>${student.class}</td>
+                    <td><img src="${qrUrl}" style="width:30px; cursor:pointer;" onclick="showQrModal('${student.username}')"></td>
+                    <td>
+                        <button class="btn btn-secondary" style="padding:5px 10px; font-size:12px;" onclick="editStudent(${index})">Edit</button>
+                        <button class="btn btn-danger" style="padding:5px 10px; font-size:12px;" onclick="deleteStudent(${index})">Hapus</button>
+                    </td>
+                `;
+                studentsBody.appendChild(row);
+            });
+        }
+
+        window.showQrModal = (username) => {
+            const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${username}`;
+            document.getElementById('qr-display-img').src = qrUrl;
+            document.getElementById('qr-show-modal').style.display = 'flex';
+        }
+
+        addStudentBtn.addEventListener('click', () => {
+            editingStudentIndex = null;
+            modalTitle.textContent = 'Tambah Siswa';
+            studentName.value = '';
+            studentUsername.value = '';
+            studentModal.style.display = 'flex';
+        });
+
+        window.editStudent = (index) => {
+            editingStudentIndex = index;
+            const student = students[index];
+            modalTitle.textContent = 'Edit Siswa';
+            studentName.value = student.name;
+            studentUsername.value = student.username;
+            studentModal.style.display = 'flex';
+        };
+
+        window.deleteStudent = (index) => {
+            if(confirm('Hapus siswa?')) {
+                students.splice(index, 1);
+                localStorage.setItem('students', JSON.stringify(students));
+                loadStudents();
+            }
+        };
+
+        saveStudentBtn.addEventListener('click', () => {
+            const name = studentName.value;
+            const username = studentUsername.value;
+            if(!name || !username) return alert('Isi data dengan lengkap');
+
+            if(editingStudentIndex !== null) {
+                students[editingStudentIndex] = { ...students[editingStudentIndex], name, username };
+            } else {
+                students.push({ name, username, class: KELAS });
+            }
+            localStorage.setItem('students', JSON.stringify(students));
+            studentModal.style.display = 'none';
+            loadStudents();
+        });
+
+        closeModal.addEventListener('click', () => studentModal.style.display = 'none');
+
+        // --- DAFTAR LENGKAP & EXPORT GAMBAR ---
+        function loadFullList() {
+            const dateVal = dateFilter.value;
+            const typeVal = typeFilter.value;
+            
+            // Update Label Tanggal
+            listDateLabel.textContent = dateVal ? `Tanggal: ${dateVal}` : "Tanggal: Semua Data";
+
+            const filtered = attendanceRecords.filter(r => {
+                const matchDate = !dateVal || r.date === dateVal;
+                const matchType = !typeVal || r.type === typeVal;
+                return matchDate && matchType;
+            }).sort((a,b) => new Date(b.date + ' ' + b.time) - new Date(a.date + ' ' + a.time));
+
+            fullAttendanceList.innerHTML = '';
+            filtered.forEach(r => {
+                const li = document.createElement('tr');
+                // Tentukan warna status
+                let statusColor = 'black';
+                if(r.type === 'Check-In' || r.type === 'Check-Out') statusColor = 'green';
+                if(r.type === 'Izin') statusColor = 'orange';
+                if(r.type === 'Sakit') statusColor = 'blue';
+
+                li.innerHTML = `
+                    <td>${r.user}</td>
+                    <td>${r.type}</td>
+                    <td>${r.date} ${r.time}</td>
+                    <td style="color:${statusColor}; font-weight:bold;">${r.note === 'Via QR Code' ? 'QR' : r.reason}</td>
+                `;
+                fullAttendanceList.appendChild(li);
+            });
+        }
+
+        dateFilter.addEventListener('change', loadFullList);
+        typeFilter.addEventListener('change', loadFullList);
+        clearFilterBtn.addEventListener('click', () => {
+            dateFilter.value = '';
+            typeFilter.value = '';
+            loadFullList();
+        });
+
+        // --- FITUR UNDUH GAMBAR (html2canvas) ---
+        document.getElementById('export-img-btn').addEventListener('click', () => {
+            // Tampilkan area yang akan di-capture
+            captureTargetList.style.display = 'block';
+            
+            html2canvas(captureTargetList).then(canvas => {
+                // Buat link download
+                const link = document.createElement('a');
+                link.download = `Riwayat_Kehadiran_${dateFilter.value || 'Semua'}.png`;
+                link.href = canvas.toDataURL();
+                link.click();
+                
+                // Sembunyikan lagi area capture (opsional, agar tidak mengacaukan tampilan)
+                // captureTargetList.style.display = 'none'; 
+            });
+        });
+
+        // --- LAPORAN ---
+        generateReportBtn.addEventListener('click', () => {
+            const monthVal = monthFilter.value;
+            if(!monthVal) return alert('Pilih bulan!');
+            
+            const [year, month] = monthVal.split('-');
+            reportMonthLabel.textContent = `Bulan: ${month}-${year}`;
+
+            const start = new Date(year, month - 1, 1);
+            const end = new Date(year, month, 0);
+
+            const monthlyData = attendanceRecords.filter(r => {
+                const d = new Date(r.date);
+                return d >= start && d <= end;
+            });
+
+            reportBody.innerHTML = '';
+            currentReportData = [];
+
+            students.forEach(s => {
+                const userData = monthlyData.filter(r => r.user === s.username);
+                const hadir = userData.filter(r => r.type === 'Check-In' || r.type === 'Check-Out').length;
+                const izin = userData.filter(r => r.type === 'Izin').length;
+                const sakit = userData.filter(r => r.type === 'Sakit').length;
+                const total = hadir + izin + sakit;
+                const percent = total === 0 ? 0 : Math.round((hadir / total) * 100);
+
+                currentReportData.push({ name: s.name, hadir, izin, sakit, percent });
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td>${s.name}</td><td>${s.class}</td><td>${hadir}</td><td>${izin}</td><td>${sakit}</td><td>${total}</td><td><b>${percent}%</b></td>`;
+                reportBody.appendChild(tr);
+            });
+            
+            // Tampilkan area laporan dan tombol unduh
+            captureTargetReport.classList.remove('hidden');
+            exportReportImgBtn.classList.remove('hidden');
+        });
+
+        // Unduh Laporan Sebagai Gambar
+        exportReportImgBtn.addEventListener('click', () => {
+            html2canvas(captureTargetReport).then(canvas => {
+                const link = document.createElement('a');
+                link.download = `Laporan_Bulanan_${monthFilter.value}.png`;
+                link.href = canvas.toDataURL();
+                link.click();
+            });
+        });
+
+        // --- NOTIFIKASI ---
+        function requestNotificationPermission() {
+            if ("Notification" in window && Notification.permission !== "granted") {
+                Notification.requestPermission();
+            }
+        }
+    </script>
+</body>
+</html>
